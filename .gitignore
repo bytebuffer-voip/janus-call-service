@@ -1,0 +1,6 @@
+/target
+/log
+.idea
+*.md
+!README.md
+.env

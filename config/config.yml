@@ -1,0 +1,11 @@
+app_name: "Janus call service"
+port: 4004
+jwt_key: ${JWT_KEY}
+expire_verify_token_ms: 172800000
+
+mongodb:
+  host: ${MONGODB_HOST}
+  port: ${MONGODB_PORT}
+  username: ${MONGODB_USERNAME}
+  password: ${MONGODB_PASSWORD}
+  db_name: ${MONGODB_NAME}
