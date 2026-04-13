@@ -9,3 +9,9 @@ mongodb:
   username: ${MONGODB_USERNAME}
   password: ${MONGODB_PASSWORD}
   db_name: ${MONGODB_NAME}
+
+janus:
+  http_uri: http://127.0.0.1:8088/janus
+  admin_uri: http://127.0.0.1:7088/admin
+  api_secret: janus-secret
+  admin_secret: janus-admin

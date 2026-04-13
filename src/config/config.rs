@@ -12,12 +12,21 @@ pub struct MongoConfig {
 }
 
 #[derive(Debug, Clone, Deserialize)]
+pub struct Janus {
+    pub http_uri: String,
+    pub admin_uri: String,
+    pub api_secret: String,
+    pub admin_secret: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
 pub struct Config {
     pub app_name: String,
     pub port: u16,
     pub jwt_key: String,
     pub expire_verify_token_ms: i64,
     pub mongodb: MongoConfig,
+    pub janus: Janus,
 }
 
 static CONFIG: OnceLock<Config> = OnceLock::new();
