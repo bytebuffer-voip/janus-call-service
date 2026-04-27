@@ -9,10 +9,12 @@ use axum::{middleware, Extension, Json, Router};
 use log::info;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
+use axum::extract::Query;
 
 pub fn user_routes(state: Arc<AppState>) -> Router {
     Router::new()
         .route("/me", get(get_me))
+        .route("/others", get(get_others))
         .route_layer(middleware::from_fn_with_state(state.clone(), auth))
         .with_state(state.clone())
         .layer(Extension(state))
@@ -58,6 +60,27 @@ async fn get_me(Extension(user_info): Extension<UserInfo>) -> Json<EntityBaseRes
         Ok(None) => Json(EntityBaseResponse::fails("User not found".to_string())),
         Err(e) => {
             info!("get_me error: {:?}", e);
+            Json(EntityBaseResponse::fails(e.to_string()))
+        }
+    }
+}
+
+#[derive(Deserialize)]
+struct OptionalSearchQuery {
+    key: Option<String>,
+}
+
+async fn get_others(
+    Extension(user_info): Extension<UserInfo>,
+    query: Query<OptionalSearchQuery>,
+) -> Json<EntityBaseResponse<Vec<MeResponse>>> {
+    match user_repo::get_users_except(&user_info.user_id, query.key.as_deref()).await {
+        Ok(users) => {
+            let list: Vec<MeResponse> = users.iter().map(MeResponse::from_user).collect();
+            Json(EntityBaseResponse::success("OK".to_string(), Some(list)))
+        }
+        Err(e) => {
+            info!("get_others error: {:?}", e);
             Json(EntityBaseResponse::fails(e.to_string()))
         }
     }

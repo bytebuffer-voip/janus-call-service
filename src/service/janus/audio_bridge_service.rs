@@ -1,4 +1,5 @@
 use crate::app_state::AppState;
+use crate::model::codec::CodecInfo;
 use crate::model::janus::{CreateJanusSessionResponse, JanusCreateRoomResp};
 use crate::service::janus::session_service::send_request;
 use crate::utils::code_utils;
@@ -6,7 +7,6 @@ use log::info;
 use rand::RngExt;
 use serde_json::json;
 use std::sync::Arc;
-use crate::model::codec::CodecInfo;
 
 pub async fn attach(state: &Arc<AppState>, session_id: i64) -> anyhow::Result<i64> {
     let cfg = &state.config;
@@ -210,5 +210,35 @@ pub async fn join_with_rtp(
         json_body.to_string(),
         body.to_string()
     );
+    Ok(())
+}
+
+pub async fn configure(
+    state: &Arc<AppState>,
+    session_id: i64,
+    handle_id: i64,
+    sdp_type: String,
+    sdp: String,
+) -> anyhow::Result<()> {
+    let cfg = &state.config;
+    let url = format!("{}/{}/{}", &cfg.janus.http_uri, session_id, handle_id);
+    let jsep = json!({
+        "type": sdp_type,
+        "sdp": sdp,
+    });
+    let json_body = json!({
+        "janus": "message",
+        "transaction": uuid::Uuid::new_v4().to_string(),
+        "session_id": session_id,
+        "handle_id": handle_id,
+        "apisecret" : cfg.janus.api_secret,
+        "body": {
+            "request": "configure",
+            "muted" : false,
+        },
+        "jsep" : jsep,
+    });
+    let body = send_request(&url, &json_body).await?;
+    info!("configure response: {}", body.to_string());
     Ok(())
 }
