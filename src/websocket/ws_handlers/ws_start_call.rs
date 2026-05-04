@@ -1,6 +1,8 @@
 use crate::app_state::AppState;
+use crate::call::app_to_app_call::{A2ACallInitParams, AppToAppCall};
 use crate::call::call_flow::call_model::Call;
 use crate::repo::user_repo;
+use crate::service::janus::{audio_bridge_service, session_service};
 use crate::utils::call_id_gen::gen_call_id;
 use crate::utils::json_utils::get_string_value;
 use crate::websocket::websocket_handler::{ClientInfo, ConnectionState};
@@ -76,29 +78,66 @@ pub async fn handle_call_start_req(
     let conn_for_call = conn_state.clone();
     let id_for_call = call_id.clone();
 
-    // let params = PeerToPeerCallParams {
-    //     caller_client_info: client_info.clone(),
-    //     caller: caller_id.to_string(),
-    //     caller_user,
-    //     callee_user,
-    // };
-    //
-    // supervisor
-    //     .start_call(
-    //         app_state.clone(),
-    //         conn_state.clone(),
-    //         id_for_call.clone().as_str(),
-    //         move |api_tx| {
-    //             Call::PeerToPeer(PeerToPeerCall::new(
-    //                 app_for_call,
-    //                 conn_for_call,
-    //                 id_for_call,
-    //                 params,
-    //                 api_tx,
-    //             ))
-    //         },
-    //     )
-    //     .await;
+    let Ok(session_id) = session_service::create_session(app_state).await else {
+        info!("Error creating janus session");
+        send_err_resp(sender, 500, "Error creating janus session", &req_id).await;
+        return;
+    };
+
+    let Ok(caller_handle_id) = audio_bridge_service::attach(app_state, session_id).await else {
+        info!("Error attaching audio bridge for caller");
+        send_err_resp(
+            sender,
+            500,
+            "Error attaching audio bridge for caller",
+            &req_id,
+        )
+        .await;
+        let _ = session_service::destroy_session(app_state, session_id).await;
+        return;
+    };
+
+    let Ok((room_id, pin, secret)) =
+        audio_bridge_service::create_room(app_state, session_id, caller_handle_id).await
+    else {
+        info!("Error creating audio bridge room");
+        send_err_resp(sender, 500, "Error creating audio bridge room", &req_id).await;
+        let _ = audio_bridge_service::detach(app_state, session_id, caller_handle_id).await;
+        let _ = session_service::destroy_session(app_state, session_id).await;
+        return;
+    };
+
+    let janus_key = format!("janus_{}_{}", session_id, caller_handle_id);
+    let params = A2ACallInitParams::new(
+        client_info.clone(),
+        caller_id.to_string(),
+        callee.to_string(),
+        caller_user,
+        callee_user,
+        session_id,
+        caller_handle_id,
+        room_id,
+        pin,
+        secret,
+    );
+
+    supervisor
+        .start_call(
+            app_state.clone(),
+            conn_state.clone(),
+            id_for_call.clone().as_str(),
+            Some(janus_key),
+            move |api_tx| {
+                Call::AppToApp(AppToAppCall::new(
+                    app_for_call,
+                    conn_for_call,
+                    id_for_call,
+                    params,
+                    api_tx,
+                ))
+            },
+        )
+        .await;
 
     let resp = json!({
         "cmd": "call_start_resp",

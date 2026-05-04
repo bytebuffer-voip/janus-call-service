@@ -1,3 +1,4 @@
+use crate::call::app_to_app_call::AppToAppCall;
 use crate::websocket::ws_connection::ClientInfo;
 use std::time::Duration;
 
@@ -41,27 +42,36 @@ pub enum CallEvent {
     Stop,
 }
 
+#[derive(Debug, Clone)]
+pub enum CallTimerAction {
+    Start(TimerType, Duration),
+    Cancel(TimerType),
+    CancelAll,
+    StopCall,
+    None,
+}
+
 #[derive(Debug)]
 pub enum Call {
-    // PeerToPeer(PeerToPeerCall),
+    AppToApp(AppToAppCall),
 }
 
 impl Call {
     pub async fn on_event(&mut self, event: CallEvent) {
-        // match self {
-        //     // Call::PeerToPeer(c) => c.on_event(event).await,
-        // }
+        match self {
+            Call::AppToApp(c) => c.on_event(event).await,
+        }
     }
 
     pub async fn cleanup(&mut self) {
-        // match self {
-        //     Call::PeerToPeer(c) => c.cleanup().await,
-        // }
+        match self {
+            Call::AppToApp(c) => c.cleanup().await,
+        }
     }
 
-    pub async fn on_timer(&mut self, timer: TimerType) {
-        // match self {
-        //     Call::PeerToPeer(c) => c.on_timer(timer).await,
-        // }
+    pub async fn on_timer(&mut self, timer: TimerType) -> CallTimerAction {
+        match self {
+            Call::AppToApp(c) => c.on_timer(timer).await,
+        }
     }
 }

@@ -3,7 +3,7 @@ use crate::call::call_flow::call_actor::CallActor;
 use crate::call::call_flow::call_model::{Call, CallEvent};
 use crate::websocket::ws_connection::ConnectionState;
 use dashmap::DashMap;
-use log::info;
+use log::{debug, info};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::mpsc;
@@ -18,16 +18,19 @@ pub enum SupervisorCommand {
 pub struct CallHandle {
     pub tx: mpsc::Sender<CallEvent>,
     pub task: JoinHandle<()>,
+    pub janus_handles: Vec<String>,
 }
 
 pub struct CallSupervisor {
     calls: DashMap<String, CallHandle>,
+    janus_handle_map: DashMap<String, String>,
 }
 
 impl CallSupervisor {
     pub fn new() -> Self {
         Self {
             calls: DashMap::new(),
+            janus_handle_map: DashMap::new(),
         }
     }
 
@@ -36,6 +39,7 @@ impl CallSupervisor {
         app_state: Arc<AppState>,
         conn_state: Arc<ConnectionState>,
         call_id: &str,
+        janus_handle_key: Option<String>,
         make_cal_func: F,
     ) -> mpsc::Sender<CallEvent>
     where
@@ -49,8 +53,12 @@ impl CallSupervisor {
         let handle = CallHandle {
             tx: tx.clone(),
             task,
+            janus_handles: vec![],
         };
         self.calls.insert(call_id.to_string(), handle);
+        if let Some(janus_handle_key) = janus_handle_key {
+            self.add_janus_handle(call_id, &janus_handle_key);
+        }
         let supervisor_clone = Arc::clone(&self);
         tokio::spawn(async move {
             while let Some(cmd) = api_rx.recv().await {
@@ -73,6 +81,12 @@ impl CallSupervisor {
             if let Err(e) = handle.tx.send(CallEvent::Stop).await {
                 info!("Err: {:?}", e);
             }
+
+            handle.janus_handles.iter().for_each(|id| {
+                debug!("Removing janus handle id {}", id);
+                self.janus_handle_map.remove(id);
+            });
+
             let mut task = handle.task;
             if timeout(Duration::from_secs(3), &mut task).await.is_err() {
                 info!("Call {} did not stop in time, aborting task", call_id);
@@ -83,5 +97,35 @@ impl CallSupervisor {
 
     pub fn get_call_tx(&self, call_id: &str) -> Option<mpsc::Sender<CallEvent>> {
         self.calls.get(call_id).map(|handle| handle.tx.clone())
+    }
+
+    pub fn get_call_tx_by_janus_handle_id(
+        &self,
+        janus_handle_id: &str,
+    ) -> Option<mpsc::Sender<CallEvent>> {
+        self.janus_handle_map
+            .get(janus_handle_id)
+            .and_then(|call_id| self.calls.get(call_id.value()).map(|call| call.tx.clone()))
+    }
+
+    pub fn add_janus_handle(&self, call_id: &str, janus_handle_id: &str) {
+        if let Some(mut call_handle) = self.calls.get_mut(call_id) {
+            let exists = call_handle
+                .janus_handles
+                .iter()
+                .any(|x| x == janus_handle_id);
+            if !exists {
+                call_handle.janus_handles.push(janus_handle_id.to_string());
+            }
+            self.janus_handle_map
+                .insert(janus_handle_id.to_string(), call_id.to_string());
+        }
+    }
+
+    pub fn remove_janus_handle_id(&self, call_id: &str, janus_handle_id: &str) {
+        if let Some(mut call_handle) = self.calls.get_mut(call_id) {
+            call_handle.janus_handles.retain(|x| x != janus_handle_id);
+            self.janus_handle_map.remove(janus_handle_id);
+        }
     }
 }
