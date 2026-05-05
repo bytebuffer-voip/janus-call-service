@@ -10,7 +10,7 @@ pub struct A2AIdleState {}
 #[async_trait::async_trait]
 impl A2ACallStateHandler for A2AIdleState {
     fn get_name(&self) -> String {
-        todo!()
+        "A2AIdleState".to_string()
     }
 
     async fn on_enter(&mut self, call: &mut AppToAppCall) -> anyhow::Result<A2AStateAction> {
