@@ -183,6 +183,13 @@ impl AppToAppCall {
             }
             _ => {}
         }
+        if let Some(mut state) = self.state.take() {
+            let r = state.on_event(self, state_event).await;
+            self.state = Some(state);
+            if let Ok(state_action) = r {
+                let _ = self.apply_action(state_action).await;
+            }
+        }
     }
 
     pub async fn on_timer(&mut self, timer: TimerType) -> CallTimerAction {

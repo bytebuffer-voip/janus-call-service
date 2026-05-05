@@ -120,9 +120,11 @@ impl A2ACallStateHandler for A2AWaitingCallerSdpState {
             CallEvent::JanusEvent(evt) => match self.process_janus_event(call, evt).await {
                 Ok(true) => {
                     // TODO
+                    info!("A2AWaitingCallerSdpState.on_event true");
                 }
                 Ok(false) => {
                     // STAY
+                    info!("A2AWaitingCallerSdpState.on_event false");
                 }
                 Err(err) => {
                     info!("A2AWaitingCallerSdpState.on_event: {:?}", err);
