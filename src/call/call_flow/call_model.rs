@@ -28,6 +28,9 @@ pub enum WebsocketEvent {
         sdp: String,
         code: i64,
     },
+    OnICECandidateCompleted {
+        client_info: ClientInfo,
+    },
     EndCall(ClientInfo),
     InCallResp {
         client_info: ClientInfo,

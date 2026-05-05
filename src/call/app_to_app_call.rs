@@ -1,5 +1,5 @@
 use crate::app_state::AppState;
-use crate::call::call_flow::call_model::{CallEvent, CallTimerAction, TimerType};
+use crate::call::call_flow::call_model::{CallEvent, CallTimerAction, TimerType, WebsocketEvent};
 use crate::call::call_flow::call_type::app_to_app_routing::state::a2a_call_state::{
     A2ACallStateHandler, A2AStateAction,
 };
@@ -8,9 +8,12 @@ use crate::call::call_flow::call_type::app_to_app_routing::state::a2a_waiting_ca
 use crate::call::call_flow::supervisor::SupervisorCommand;
 use crate::model::janus_webrtc::JanusWebRTCSessionManager;
 use crate::model::user::User;
+use crate::service::janus::session_service;
+use crate::utils::json_utils;
 use crate::websocket::websocket_handler::{ClientInfo, ConnectionState};
 use futures_util::future::BoxFuture;
 use log::info;
+use serde_json::Value;
 use std::fmt;
 use std::sync::Arc;
 use std::time::Duration;
@@ -85,7 +88,6 @@ impl AppToAppCall {
         params: A2ACallInitParams,
         api_tx: Sender<SupervisorCommand>,
     ) -> Self {
-
         let mut web_rtc_man =
             JanusWebRTCSessionManager::new(call_id.clone(), params.caller_session_id);
         web_rtc_man.add_client_handle(
@@ -104,7 +106,6 @@ impl AppToAppCall {
             state: None,
             web_rtc_man,
         }
-
     }
 
     async fn apply_action(&mut self, action: A2AStateAction) -> anyhow::Result<()> {
@@ -189,6 +190,12 @@ impl AppToAppCall {
                         );
                     });
             }
+            CallEvent::Websocket(e) => {
+                let _ = self.process_websocket_event(e).await;
+            }
+            CallEvent::JanusEvent(e) => {
+                let _ = self.process_janus_event(e).await;
+            }
             _ => {}
         }
         if let Some(mut state) = self.state.take() {
@@ -200,9 +207,101 @@ impl AppToAppCall {
         }
     }
 
+    async fn process_janus_event(&mut self, evt: Value) -> anyhow::Result<()> {
+        if evt.get("type").and_then(Value::as_i64).unwrap_or(-1) == -1 {
+            return Ok(());
+        }
+        let session_id = json_utils::get_int_value(&evt, "session_id");
+        let handle_id = json_utils::get_int_value(&evt, "handle_id");
+        if let Some(event) = evt.get("event") {
+            if let Some(local_candidate) = event.get("local-candidate").and_then(|v| v.as_str()) {
+                self.web_rtc_man
+                    .on_server_candidate(
+                        &self.app_state,
+                        &self.conn_state,
+                        handle_id,
+                        local_candidate,
+                    )
+                    .await?;
+                return Ok(());
+            }
+        }
+        Ok(())
+    }
+
+    async fn process_websocket_event(&mut self, evt: WebsocketEvent) -> anyhow::Result<()> {
+        match evt {
+            WebsocketEvent::EndCall(info) => {
+                if self.check_is_agent_client(info.client_id) {
+                    let end_state = A2AEndState {
+                        reason: "User hangup".into(),
+                    };
+                    self.apply_action(A2AStateAction::Transition(Box::new(end_state)))
+                        .await?;
+                }
+            }
+            WebsocketEvent::OnICECandidate {
+                candidate,
+                client_info,
+                sdp_mid,
+                sdp_mline_index,
+            } => {
+                self.web_rtc_man
+                    .on_client_candidate(
+                        &self.app_state,
+                        &self.conn_state,
+                        &client_info.client_id,
+                        &candidate,
+                        sdp_mline_index,
+                        sdp_mid,
+                    )
+                    .await?;
+            }
+            WebsocketEvent::OnICECandidateCompleted { client_info } => {
+                self.web_rtc_man
+                    .on_client_candidate_completed(
+                        &self.app_state,
+                        &self.conn_state,
+                        &client_info.client_id,
+                    )
+                    .await?;
+            }
+            _ => {}
+        }
+        Ok(())
+    }
+
+    fn check_is_agent_client(&mut self, client_id: Uuid) -> bool {
+        if let Some(mut state) = self.state.take() {
+            let res = state.check_is_agent_client(self, client_id);
+            self.state = Some(state);
+            res
+        } else {
+            false
+        }
+    }
+
     pub async fn on_timer(&mut self, timer: TimerType) -> CallTimerAction {
+        if timer == TimerType::JanusKeepalive {
+            let _ =
+                session_service::keepalive(&self.app_state, self.params.caller_session_id).await;
+            return CallTimerAction::Start(TimerType::JanusKeepalive, Duration::from_secs(30));
+        }
+        if let Some(mut state) = self.state.take() {
+            let res = state.on_timer(self, timer).await;
+            self.state = Some(state);
+            if let Ok(state_action) = res {
+                let _ = self.apply_action(state_action).await;
+            }
+        }
         CallTimerAction::None
     }
 
-    pub async fn cleanup(&mut self) {}
+    pub async fn cleanup(&mut self) {
+        if let Some(mut state) = self.state.take() {
+            let state_action = state.call_end(self).await;
+            self.state = Some(state);
+            let _ = self.apply_action(state_action).await;
+        }
+    }
 }
