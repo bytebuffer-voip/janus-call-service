@@ -46,6 +46,7 @@ impl JanusWebRTCSessionManager {
             conn_state.send_to_client_by_id(client_id, msg.to_string());
             return Ok(true);
         }
+
         Ok(false)
     }
 

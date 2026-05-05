@@ -85,7 +85,14 @@ impl AppToAppCall {
         params: A2ACallInitParams,
         api_tx: Sender<SupervisorCommand>,
     ) -> Self {
-        let web_rtc_man = JanusWebRTCSessionManager::new(call_id.clone(), params.caller_session_id);
+
+        let mut web_rtc_man =
+            JanusWebRTCSessionManager::new(call_id.clone(), params.caller_session_id);
+        web_rtc_man.add_client_handle(
+            params.client_info.client_id.clone(),
+            params.caller_handle_id,
+        );
+
         Self {
             app_state,
             conn_state,
@@ -97,6 +104,7 @@ impl AppToAppCall {
             state: None,
             web_rtc_man,
         }
+
     }
 
     async fn apply_action(&mut self, action: A2AStateAction) -> anyhow::Result<()> {

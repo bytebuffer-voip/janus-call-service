@@ -1,4 +1,5 @@
 use crate::app_state::AppState;
+use crate::call::call_flow::call_model::CallEvent;
 use crate::websocket::websocket_handler::ConnectionState;
 use axum::Extension;
 use axum::extract::ws::{Message, WebSocket};
@@ -59,7 +60,21 @@ async fn handle_socket(
                                     .get("handle_id")
                                     .and_then(|v| v.as_i64())
                                     .unwrap_or(-1);
-                                if session_id != -1 && handle_id != -1 {}
+                                if session_id != -1 && handle_id != -1 {
+                                    let key = format!("janus_{}_{}", session_id, handle_id);
+                                    if let Some(tx) = app_state
+                                        .call_supervisor
+                                        .get_call_tx_by_janus_handle_id(&key)
+                                    {
+                                        let evt = CallEvent::JanusEvent(request.clone());
+                                        if let Err(e) = tx.send(evt).await {
+                                            info!(
+                                                "Error sending janus event to call supervisor: {:?}",
+                                                e
+                                            );
+                                        };
+                                    }
+                                }
                             }
                         }
                         _ => {

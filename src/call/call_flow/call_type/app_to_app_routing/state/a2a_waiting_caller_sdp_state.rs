@@ -3,6 +3,7 @@ use crate::call::call_flow::call_model::{CallEvent, TimerType, WebsocketEvent};
 use crate::call::call_flow::call_type::app_to_app_routing::state::a2a_call_state::{
     A2ACallStateHandler, A2AStateAction,
 };
+use crate::call::call_flow::call_type::app_to_app_routing::state::a2a_connect_to_callee_state::A2AConnectToCalleeState;
 use crate::call::call_flow::call_type::app_to_app_routing::state::a2a_end_state::A2AEndState;
 use crate::service::janus::audio_bridge_service;
 use crate::utils::{jsep_utils, json_utils};
@@ -121,6 +122,8 @@ impl A2ACallStateHandler for A2AWaitingCallerSdpState {
                 Ok(true) => {
                     // TODO
                     info!("A2AWaitingCallerSdpState.on_event true");
+                    let next_state = A2AConnectToCalleeState::new();
+                    return Ok(A2AStateAction::Transition(Box::new(next_state)));
                 }
                 Ok(false) => {
                     // STAY
