@@ -1,0 +1,18 @@
+version: '3.8'
+
+services:
+  rtpengine:
+    image: rtpengine:1.0
+    container_name: rtpengine
+    restart: unless-stopped
+    network_mode: host
+    cap_add:
+      - NET_ADMIN
+      - SYS_NICE
+      - SYS_RESOURCE
+    volumes:
+      - ./rtpengine.conf:/etc/rtpengine/rtpengine.conf:ro
+    environment:
+      - RTPENGINE_OPTS=--interface=103.216.119.180 --listen-ng=0.0.0.0:2223
+      - TZ=Asia/Saigon
+    command: [ "--interface=103.216.119.180", "--listen-ng=0.0.0.0:2223", "--dtmf-log-dest=103.216.119.180:9983" ]
