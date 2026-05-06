@@ -4,7 +4,9 @@ use crate::call::call_flow::call_type::app_to_app_routing::state::a2a_call_state
     A2ACallStateHandler, A2AStateAction,
 };
 use crate::call::call_flow::call_type::app_to_app_routing::state::a2a_end_state::A2AEndState;
+use crate::call::call_flow::call_type::app_to_app_routing::state::a2a_waiting_caller_sdp_state::A2AWaitingCallerSdpState;
 use crate::call::call_flow::supervisor::SupervisorCommand;
+use crate::model::janus_webrtc::JanusWebRTCSessionManager;
 use crate::model::user::User;
 use crate::websocket::websocket_handler::{ClientInfo, ConnectionState};
 use futures_util::future::BoxFuture;
@@ -66,6 +68,7 @@ pub struct AppToAppCall {
     pub callee_handle_ids: Vec<i64>,
     pub callee_client_uuid: Option<Uuid>,
     state: Option<Box<dyn A2ACallStateHandler>>,
+    pub web_rtc_man: JanusWebRTCSessionManager,
 }
 
 impl fmt::Debug for AppToAppCall {
@@ -82,6 +85,14 @@ impl AppToAppCall {
         params: A2ACallInitParams,
         api_tx: Sender<SupervisorCommand>,
     ) -> Self {
+
+        let mut web_rtc_man =
+            JanusWebRTCSessionManager::new(call_id.clone(), params.caller_session_id);
+        web_rtc_man.add_client_handle(
+            params.client_info.client_id.clone(),
+            params.caller_handle_id,
+        );
+
         Self {
             app_state,
             conn_state,
@@ -91,7 +102,9 @@ impl AppToAppCall {
             callee_handle_ids: Vec::new(),
             callee_client_uuid: None,
             state: None,
+            web_rtc_man,
         }
+
     }
 
     async fn apply_action(&mut self, action: A2AStateAction) -> anyhow::Result<()> {
@@ -165,7 +178,25 @@ impl AppToAppCall {
     pub async fn on_event(&mut self, event: CallEvent) {
         let state_event = event.clone();
         match event {
+            CallEvent::Start => {
+                self.start_timer(TimerType::JanusKeepalive, 30).await;
+                self.transition_to(Box::new(A2AWaitingCallerSdpState::new()))
+                    .await
+                    .unwrap_or_else(|e| {
+                        info!(
+                            "Error transitioning to A2AWaitSDPState for call {}, error: {}",
+                            self.call_id, e
+                        );
+                    });
+            }
             _ => {}
+        }
+        if let Some(mut state) = self.state.take() {
+            let r = state.on_event(self, state_event).await;
+            self.state = Some(state);
+            if let Ok(state_action) = r {
+                let _ = self.apply_action(state_action).await;
+            }
         }
     }
 

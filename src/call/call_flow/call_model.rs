@@ -1,12 +1,14 @@
 use crate::call::app_to_app_call::AppToAppCall;
 use crate::websocket::ws_connection::ClientInfo;
 use std::time::Duration;
+use serde_json::Value;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum TimerType {
     WaitSDPTimeout,
     ResendIncomingCall,
     CheckRoomTimer,
+    JanusKeepalive,
 }
 
 #[derive(Debug, Clone)]
@@ -36,6 +38,7 @@ pub enum WebsocketEvent {
 pub enum CallEvent {
     Start,
     Websocket(WebsocketEvent),
+    JanusEvent(Value),
     Timer(TimerType),
     StartTimer(TimerType, Duration),
     StopTimer(TimerType),
