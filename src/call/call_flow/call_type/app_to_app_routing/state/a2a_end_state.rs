@@ -12,7 +12,7 @@ pub struct A2AEndState {
 #[async_trait::async_trait]
 impl A2ACallStateHandler for A2AEndState {
     fn get_name(&self) -> String {
-        todo!()
+        "A2AEndState".to_string()
     }
 
     async fn on_enter(&mut self, call: &mut AppToAppCall) -> anyhow::Result<A2AStateAction> {
