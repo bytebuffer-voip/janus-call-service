@@ -1,8 +1,8 @@
 use crate::app_state::AppState;
-use crate::model::codec::CodecInfo;
 use crate::model::janus::{CreateJanusSessionResponse, JanusCreateRoomResp};
 use crate::service::janus::session_service::send_request;
 use crate::utils::code_utils;
+use crate::utils::sdp_util::CodecInfo;
 use log::info;
 use rand::RngExt;
 use serde_json::json;
