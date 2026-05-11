@@ -20,6 +20,12 @@ pub struct Janus {
 }
 
 #[derive(Debug, Clone, Deserialize)]
+pub struct SipTransportConfig {
+    pub port: u16,
+    pub public_ip: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
 pub struct Config {
     pub app_name: String,
     pub port: u16,
@@ -27,6 +33,7 @@ pub struct Config {
     pub expire_verify_token_ms: i64,
     pub mongodb: MongoConfig,
     pub janus: Janus,
+    pub sip_transport: SipTransportConfig,
 }
 
 static CONFIG: OnceLock<Config> = OnceLock::new();
