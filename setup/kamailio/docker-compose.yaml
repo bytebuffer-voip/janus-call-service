@@ -1,0 +1,10 @@
+services:
+  kamailio:
+    image: kamailio-prod:1.1
+    container_name: kamailio-prod
+    network_mode: host
+    volumes:
+      - ./config:/usr/local/etc/kamailio
+    environment:
+      - RUN_KAMAILIO=yes
+    restart: always
