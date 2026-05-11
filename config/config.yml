@@ -19,3 +19,7 @@ janus:
 sip_transport:
   port: 9982
   public_ip: "103.216.119.180"
+
+kamailio:
+  host: 103.216.119.180
+  port: 5061
