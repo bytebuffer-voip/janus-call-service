@@ -1,4 +1,4 @@
-use crate::call::call_flow::call_model::TimerType;
+use crate::call::call_flow::call_model::{CallEvent, TimerType};
 use crate::call::call_flow::call_type::sip_to_app_routing::state::s2a_call_state::{
     S2ACallStateHandler, S2AStateAction,
 };
@@ -9,6 +9,7 @@ use crate::utils::sdp_util::select_codec;
 use crate::utils::{sdp_util, sip_utils};
 use log::info;
 use rsip::SipMessage;
+use serde_json::Value;
 use uuid::Uuid;
 
 const STATE_NAME: &str = "S2AJoinSipMemberToRoomState";
@@ -19,6 +20,55 @@ pub struct S2AJoinSipMemberToRoomState {
 impl S2AJoinSipMemberToRoomState {
     pub fn new() -> Self {
         Self { sdp_answer: None }
+    }
+
+    async fn on_janus_event(
+        &mut self,
+        call: &mut SipToAppCall,
+        evt: &Value,
+    ) -> anyhow::Result<bool> {
+        let event_type = evt.get("type").and_then(|e| e.as_i64()).unwrap_or(-1);
+        if event_type == -1 {
+            return Ok(false);
+        }
+        let session_id = evt
+            .get("session_id")
+            .and_then(|s| s.as_i64())
+            .unwrap_or_default();
+        let handle_id = evt
+            .get("handle_id")
+            .and_then(|h| h.as_i64())
+            .unwrap_or_default();
+
+        let event_data = evt.get("event").and_then(|e| e.get("data"));
+
+        let event_str = event_data
+            .and_then(|d| d.get("event"))
+            .and_then(|e| e.as_str())
+            .unwrap_or_default();
+
+        if event_str == "joined" {
+            let handle_info = match audio_bridge_service::get_handle_info(
+                &call.app_state,
+                call.params.session_id,
+                call.params.handle_id,
+            )
+            .await
+            {
+                Ok(info) => info,
+                Err(e) => {
+                    info!("{}: Failed to get handle info: {}", STATE_NAME, e);
+                    return Ok(false);
+                }
+            };
+            info!(
+                "{}: Janus handle info: {}",
+                STATE_NAME,
+                handle_info.to_string()
+            );
+        }
+
+        Ok(false)
     }
 }
 
@@ -91,8 +141,20 @@ impl S2ACallStateHandler for S2AJoinSipMemberToRoomState {
     async fn on_event(
         &mut self,
         call: &mut SipToAppCall,
-        event: crate::call::call_flow::call_model::CallEvent,
+        event: CallEvent,
     ) -> anyhow::Result<S2AStateAction> {
+        match event {
+            CallEvent::JanusEvent(evt) => {
+                info!("{}: JanusEvent: {:?}", STATE_NAME, evt.to_string());
+                match self.on_janus_event(call, &evt).await {
+                    Ok(info) => {
+                        info!("{}: JanusEvent: {}", STATE_NAME, info.to_string());
+                    }
+                    Err(err) => {}
+                }
+            }
+            _ => {}
+        }
         Ok(S2AStateAction::Stay)
     }
 
