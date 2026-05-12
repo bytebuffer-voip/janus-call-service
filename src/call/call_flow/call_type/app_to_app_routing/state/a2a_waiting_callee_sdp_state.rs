@@ -5,7 +5,7 @@ use crate::call::call_flow::call_type::app_to_app_routing::state::a2a_call_state
 };
 use crate::call::call_flow::call_type::app_to_app_routing::state::a2a_end_state::A2AEndState;
 use crate::call::call_flow::call_type::app_to_app_routing::state::a2a_talking_state::A2ATalkingState;
-use crate::service::janus::{audio_bridge_service, session_service};
+use crate::service::janus::audio_bridge_service;
 use crate::utils::{jsep_utils, json_utils};
 use log::info;
 use serde_json::{Value, json};

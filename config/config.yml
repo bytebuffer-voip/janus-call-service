@@ -15,3 +15,7 @@ janus:
   admin_uri: http://127.0.0.1:7088/admin
   api_secret: janus-secret
   admin_secret: janus-admin
+
+sip_transport:
+  port: 9982
+  public_ip: "103.216.119.180"

@@ -4,6 +4,8 @@
 use crate::app_state::AppState;
 use crate::config::config::Config;
 use crate::config::mongodb_cfg::get_mongo_client;
+use crate::network::sip_transport;
+use crate::network::sip_transport::SipTransport;
 use crate::router::create_router;
 use crate::websocket::ws_connection::ConnectionState;
 use dotenv::dotenv;
@@ -14,16 +16,17 @@ use std::sync::Arc;
 use tokio::net::TcpListener;
 
 mod app_state;
+mod call;
 mod config;
 mod controller;
 mod middlerware;
 mod model;
+mod network;
 mod repo;
 mod router;
 mod service;
 mod utils;
 mod websocket;
-mod call;
 
 #[tokio::main]
 async fn main() {
@@ -40,15 +43,34 @@ async fn main() {
         .await
         .unwrap();
 
-    let app_state = Arc::new(AppState::new(Config::global_config().clone()));
-    let conn_state = Arc::new(ConnectionState::default());
-    let router =
-        create_router(app_state, conn_state).into_make_service_with_connect_info::<SocketAddr>();
+    let cfg = Config::global_config();
+    let address = format!("0.0.0.0:{}", cfg.sip_transport.port);
+    let transport = Arc::new(SipTransport::bind(&address).await.unwrap());
 
-    let port = Config::global_config().port;
+    let app_state = Arc::new(AppState::new(cfg.clone(), transport));
+    let conn_state = Arc::new(ConnectionState::default());
+    let router = create_router(app_state.clone(), conn_state.clone())
+        .into_make_service_with_connect_info::<SocketAddr>();
+
+    //
+    run_tasks(app_state, conn_state).await.unwrap();
+
+    let port = cfg.port;
     let listener = TcpListener::bind(format!("0.0.0.0:{}", port))
         .await
         .unwrap();
 
     axum::serve(listener, router).await.unwrap();
+}
+
+async fn run_tasks(
+    shared_state: Arc<AppState>,
+    connection_state: Arc<ConnectionState>,
+) -> anyhow::Result<()> {
+    let app_state = shared_state.clone();
+    let conn_state = connection_state.clone();
+    tokio::spawn(async move {
+        let _ = sip_transport::recv_loop(&app_state, &conn_state).await;
+    });
+    Ok(())
 }
