@@ -4,7 +4,7 @@ use rand::RngExt;
 use rsip::headers::ToTypedHeader;
 use rsip::headers::UntypedHeader;
 use rsip::message::HeadersExt;
-use rsip::{Header, Headers, Method, Param, Request, Response, SipMessage, Version};
+use rsip::{Header, Headers, Method, Param, Request, Response, SipMessage, StatusCode, Version};
 use std::sync::atomic::{AtomicU64, Ordering};
 
 const CHARACTERS: &[u8] = b"abcdefghijkmnpqrstxyz1234567890";
@@ -387,5 +387,85 @@ fn append_route_headers(headers: &mut Headers, response: &Response, reverse: boo
         headers.push(Header::Route(rsip::headers::Route::new(
             rr.value().to_string(),
         )));
+    }
+}
+
+pub fn build_response_183_with_sdp(
+    config: &Config,
+    invite: &Request,
+    sdp: String,
+    to_tag: rsip::common::uri::param::tag::Tag,
+) -> Response {
+    let mut headers = Headers::default();
+
+    // Copy Via headers
+    invite.headers.iter().for_each(|e| {
+        if let Header::Via(via) = e {
+            headers.push(Header::Via(via.clone().into()));
+        }
+    });
+
+    // Copy Record-Route headers
+    invite.headers.iter().for_each(|e| {
+        if let Header::RecordRoute(r) = e {
+            headers.push(Header::RecordRoute(r.clone().into()));
+        }
+    });
+
+    // From header
+    headers.push(Header::From(invite.from_header().unwrap().clone().into()));
+
+    // To header — 183 cũng cần tag (best practice, một số UA yêu cầu)
+    let mut to = invite.to_header().unwrap().clone();
+    to.mut_tag(to_tag).unwrap();
+    headers.push(Header::To(to.into()));
+
+    // Call-ID
+    headers.push(Header::CallId(
+        invite.call_id_header().unwrap().clone().into(),
+    ));
+
+    // CSeq
+    headers.push(Header::CSeq(invite.cseq_header().unwrap().clone().into()));
+
+    // Contact
+    let proxy = format!(
+        "{}:{}",
+        config.sip_transport.public_ip, config.sip_transport.port
+    );
+    let contact = rsip::typed::Contact {
+        display_name: None,
+        uri: rsip::Uri {
+            scheme: Some(rsip::Scheme::Sip),
+            auth: None,
+            host_with_port: rsip::Domain::from(proxy).into(),
+            params: Default::default(),
+            headers: Default::default(),
+        },
+        params: Default::default(),
+    };
+    headers.push(Header::Contact(contact.into()));
+
+    // Require: 100rel nếu INVITE có Supported/Require: 100rel
+    let has_100rel = invite.headers.iter().any(|h| match h {
+        Header::Require(v) => v.to_string().contains("100rel"),
+        Header::Supported(v) => v.to_string().contains("100rel"),
+        _ => false,
+    });
+    if has_100rel {
+        headers.push(Header::Require("100rel".into()));
+        // RSeq — bắt đầu từ 1, tăng dần nếu có nhiều provisional
+        headers.push(Header::Other("RSeq".into(), "1".into()));
+    }
+
+    // Content
+    headers.push(Header::ContentType("application/sdp".into()));
+    headers.push(Header::ContentLength(sdp.len().to_string().into()));
+
+    Response {
+        version: invite.version().clone(),
+        status_code: StatusCode::SessionProgress, // 183
+        headers,
+        body: sdp.into_bytes(),
     }
 }

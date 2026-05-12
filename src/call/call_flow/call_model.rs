@@ -39,10 +39,17 @@ pub enum WebsocketEvent {
 }
 
 #[derive(Debug, Clone)]
+pub enum SipEvent {
+    SIPRequest { id: String, req: rsip::Request },
+    SIPResponse { id: String, resp: rsip::Response },
+}
+
+#[derive(Debug, Clone)]
 pub enum CallEvent {
     Start,
     Websocket(WebsocketEvent),
     JanusEvent(Value),
+    SIP(SipEvent),
     Timer(TimerType),
     StartTimer(TimerType, Duration),
     StopTimer(TimerType),

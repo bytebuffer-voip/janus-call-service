@@ -54,6 +54,9 @@ pub struct SipToAppCall {
     pub api_tx: Sender<SupervisorCommand>,
     pub web_rtc_man: JanusWebRTCSessionManager,
     state: Option<Box<dyn S2ACallStateHandler>>,
+    pub to_tag: Option<rsip::common::uri::param::tag::Tag>,
+    pub sip_answer_sdp: Option<String>,
+    pub ok_resp: Option<rsip::Response>,
 }
 
 impl fmt::Debug for SipToAppCall {
@@ -81,6 +84,9 @@ impl SipToAppCall {
             api_tx,
             web_rtc_man,
             state: None,
+            to_tag: None,
+            sip_answer_sdp: None,
+            ok_resp: None,
         }
     }
 

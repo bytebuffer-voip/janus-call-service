@@ -74,3 +74,68 @@ pub fn parse_sdp_ip_port(sdp: &str) -> Option<(String, u16)> {
         _ => None,
     }
 }
+
+pub fn build_sdp_answer(janus_ip: &str, janus_port: u16, codec: &CodecInfo) -> String {
+    let codec_line = match codec.payload_type {
+        8 => "a=rtpmap:8 PCMA/8000\r\n".to_string(),
+        0 => "a=rtpmap:0 PCMU/8000\r\n".to_string(),
+        pt => format!(
+            "a=rtpmap:{pt} opus/48000/2\r\n\
+             a=fmtp:{pt} minptime=20; useinbandfec=1\r\n",
+            pt = pt
+        ),
+    };
+
+    format!(
+        "v=0\r\n\
+         o=RustApp 0 0 IN IP4 {ip}\r\n\
+         s=OmiStack\r\n\
+         c=IN IP4 {ip}\r\n\
+         t=0 0\r\n\
+         m=audio {port} RTP/AVP {pt} 101\r\n\
+         {codec}\
+         a=rtpmap:101 telephone-event/8000\r\n\
+         a=fmtp:101 0-16\r\n\
+         a=sendrecv\r\n\
+         a=ptime:20\r\n",
+        ip = janus_ip,
+        port = janus_port,
+        pt = codec.payload_type,
+        codec = codec_line,
+    )
+}
+
+pub fn sdp_set_direction(sdp: &str, direction: &str) -> String {
+    let direction_attrs = ["a=sendrecv", "a=sendonly", "a=recvonly", "a=inactive"];
+    let mut found = false;
+    let result = sdp
+        .lines()
+        .map(|line| {
+            if direction_attrs
+                .iter()
+                .any(|d| line.trim_start().starts_with(d))
+            {
+                found = true;
+                format!("a={}", direction)
+            } else {
+                line.to_string()
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("\r\n");
+    if !found {
+        let result = sdp
+            .lines()
+            .map(|line| {
+                if line.trim_start().starts_with("m=") {
+                    format!("a={}\r\n{}", direction, line)
+                } else {
+                    line.to_string()
+                }
+            })
+            .collect::<Vec<_>>()
+            .join("\r\n");
+        return result;
+    }
+    result
+}
