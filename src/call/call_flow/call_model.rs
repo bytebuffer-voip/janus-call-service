@@ -1,7 +1,8 @@
 use crate::call::app_to_app_call::AppToAppCall;
+use crate::call::sip_to_app_call::SipToAppCall;
 use crate::websocket::ws_connection::ClientInfo;
-use std::time::Duration;
 use serde_json::Value;
+use std::time::Duration;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum TimerType {
@@ -60,24 +61,28 @@ pub enum CallTimerAction {
 #[derive(Debug)]
 pub enum Call {
     AppToApp(AppToAppCall),
+    SIPToApp(SipToAppCall),
 }
 
 impl Call {
     pub async fn on_event(&mut self, event: CallEvent) {
         match self {
             Call::AppToApp(c) => c.on_event(event).await,
+            Call::SIPToApp(c) => c.on_event(event).await,
         }
     }
 
     pub async fn cleanup(&mut self) {
         match self {
             Call::AppToApp(c) => c.cleanup().await,
+            Call::SIPToApp(c) => c.cleanup().await,
         }
     }
 
     pub async fn on_timer(&mut self, timer: TimerType) -> CallTimerAction {
         match self {
             Call::AppToApp(c) => c.on_timer(timer).await,
+            Call::SIPToApp(c) => c.on_timer(timer).await,
         }
     }
 }

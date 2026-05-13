@@ -1,4 +1,5 @@
 use serde::Deserialize;
+use std::net::{IpAddr, SocketAddr};
 use std::sync::OnceLock;
 use std::{env, fs};
 
@@ -26,6 +27,24 @@ pub struct SipTransportConfig {
 }
 
 #[derive(Debug, Clone, Deserialize)]
+pub struct KamailioConfig {
+    pub host: String,
+    pub port: u16,
+    pub http_uri: Option<String>,
+    #[serde(default)]
+    pub username: Option<String>,
+    #[serde(default)]
+    pub password: Option<String>,
+}
+
+impl KamailioConfig {
+    pub fn socket_addr(&self) -> anyhow::Result<SocketAddr> {
+        let ip: IpAddr = self.host.parse()?;
+        Ok(SocketAddr::new(ip, self.port))
+    }
+}
+
+#[derive(Debug, Clone, Deserialize)]
 pub struct Config {
     pub app_name: String,
     pub port: u16,
@@ -34,6 +53,7 @@ pub struct Config {
     pub mongodb: MongoConfig,
     pub janus: Janus,
     pub sip_transport: SipTransportConfig,
+    pub kamailio: KamailioConfig,
 }
 
 static CONFIG: OnceLock<Config> = OnceLock::new();
