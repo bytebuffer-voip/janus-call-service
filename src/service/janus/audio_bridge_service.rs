@@ -1,11 +1,11 @@
 use crate::app_state::AppState;
-use crate::model::codec::CodecInfo;
 use crate::model::janus::{CreateJanusSessionResponse, JanusCreateRoomResp};
 use crate::service::janus::session_service::send_request;
 use crate::utils::code_utils;
+use crate::utils::sdp_util::CodecInfo;
 use log::info;
 use rand::RngExt;
-use serde_json::json;
+use serde_json::{json, Value};
 use std::sync::Arc;
 
 pub async fn attach(state: &Arc<AppState>, session_id: i64) -> anyhow::Result<i64> {
@@ -241,4 +241,28 @@ pub async fn configure(
     let body = send_request(&url, &json_body).await?;
     info!("configure response: {}", body.to_string());
     Ok(())
+}
+
+pub async fn get_handle_info(
+    state: &Arc<AppState>,
+    session_id: i64,
+    handle_id: i64,
+) -> anyhow::Result<Value> {
+    let cfg = &state.config;
+    let url = format!("{}/{}/{}", &cfg.janus.admin_uri, session_id, handle_id);
+    let json_body = json!({
+        "janus": "handle_info",
+        "session_id": session_id,
+        "handle_id": handle_id,
+        "admin_secret" : cfg.janus.admin_secret,
+        "transaction": uuid::Uuid::new_v4().to_string(),
+    });
+    let body = send_request(&url, &json_body).await?;
+    info!(
+        "get_handle_info uri: {}, body: {}, resp: {}",
+        &url,
+        json_body.to_string(),
+        body.to_string()
+    );
+    Ok(body)
 }

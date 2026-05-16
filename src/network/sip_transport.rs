@@ -42,7 +42,7 @@ pub async fn recv_loop(
         if let Ok(req) = Request::try_from(msg.as_ref()) {
             let method = req.method();
             let body = req.body.clone();
-            let text_body = String::from_utf8_lossy(body.as_ref());
+            let text_body = String::from_utf8_lossy(body.as_ref()); // sdp offer
 
             match method {
                 Method::Invite => {

@@ -19,11 +19,17 @@ pub struct CallHandle {
     pub tx: mpsc::Sender<CallEvent>,
     pub task: JoinHandle<()>,
     pub janus_handles: Vec<String>,
+    // for sip calls
+    pub sip_pending_trans: Vec<String>,
+    pub dialog_ids: Vec<String>,
 }
 
 pub struct CallSupervisor {
     calls: DashMap<String, CallHandle>,
     janus_handle_map: DashMap<String, String>,
+    // for sip call
+    sip_pending_trans: DashMap<String, String>,
+    dialog_ids: DashMap<String, String>,
 }
 
 impl CallSupervisor {
@@ -31,6 +37,8 @@ impl CallSupervisor {
         Self {
             calls: DashMap::new(),
             janus_handle_map: DashMap::new(),
+            sip_pending_trans: DashMap::new(),
+            dialog_ids: DashMap::new(),
         }
     }
 
@@ -54,6 +62,8 @@ impl CallSupervisor {
             tx: tx.clone(),
             task,
             janus_handles: vec![],
+            sip_pending_trans: vec![],
+            dialog_ids: vec![],
         };
         self.calls.insert(call_id.to_string(), handle);
         if let Some(janus_handle_key) = janus_handle_key {
@@ -85,6 +95,16 @@ impl CallSupervisor {
             handle.janus_handles.iter().for_each(|id| {
                 debug!("Removing janus handle id {}", id);
                 self.janus_handle_map.remove(id);
+            });
+
+            handle.sip_pending_trans.iter().for_each(|tx| {
+                debug!("Removing sip pending transaction id {}", tx);
+                self.sip_pending_trans.remove(tx);
+            });
+
+            handle.dialog_ids.iter().for_each(|id| {
+                debug!("Removing dialog id {}", id);
+                self.dialog_ids.remove(id);
             });
 
             let mut task = handle.task;
@@ -127,5 +147,48 @@ impl CallSupervisor {
             call_handle.janus_handles.retain(|x| x != janus_handle_id);
             self.janus_handle_map.remove(janus_handle_id);
         }
+    }
+
+    pub fn add_sip_pending_tran(&self, call_id: &str, pending_trans_id: &str) {
+        if let Some(mut call_handle) = self.calls.get_mut(call_id) {
+            let exists = call_handle
+                .sip_pending_trans
+                .iter()
+                .any(|x| x == pending_trans_id);
+            if !exists {
+                call_handle
+                    .sip_pending_trans
+                    .push(pending_trans_id.to_string());
+            }
+            self.sip_pending_trans
+                .insert(pending_trans_id.to_string(), call_id.to_string());
+        }
+    }
+
+    pub fn get_call_tx_by_sip_pending_tran(
+        &self,
+        pending_trans_id: &str,
+    ) -> Option<mpsc::Sender<CallEvent>> {
+        self.sip_pending_trans
+            .get(pending_trans_id)
+            .and_then(|call_id| self.calls.get(call_id.value()).map(|call| call.tx.clone()))
+    }
+
+    // dialog
+    pub fn add_dialog(&self, call_id: &str, dialog_id: &str) {
+        if let Some(mut call_handle) = self.calls.get_mut(call_id) {
+            let exists = call_handle.dialog_ids.iter().any(|x| x == dialog_id);
+            if !exists {
+                call_handle.dialog_ids.push(dialog_id.to_string());
+            }
+            self.dialog_ids
+                .insert(dialog_id.to_string(), call_id.to_string());
+        }
+    }
+
+    pub fn get_call_tx_by_dialog_id(&self, dialog_id: &str) -> Option<mpsc::Sender<CallEvent>> {
+        self.dialog_ids
+            .get(dialog_id)
+            .and_then(|call_id| self.calls.get(call_id.value()).map(|call| call.tx.clone()))
     }
 }

@@ -4,7 +4,6 @@ pub mod auth;
 pub mod response;
 pub mod candidate;
 pub mod janus;
-pub mod codec;
 pub mod janus_webrtc;
 
 
